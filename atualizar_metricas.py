@@ -105,15 +105,15 @@ def fetch_ga4():
 
 
 def fetch_rev_seg():
-    """Linha = termo manual, coluna = conteudo do anuncio manual, valor = receita total.
-    Para o grafico basta o total por coluna (conteudo) dos segmentos conhecidos."""
+    """Receita total por dia e por segmento (conteudo do anuncio manual da sessao).
+    A pagina soma conforme o seletor de datas. Termo manual nao entra: so o total por conteudo importa."""
     body = json.dumps({
         "ds_id": "GAWA",
         "ds_accounts": [os.environ["SUPERMETRICS_GA4_ACCOUNT_ID"]],
         "ds_user": SM_USER,
         "start_date": REV_SEG_START,
         "end_date": date.today().isoformat(),
-        "fields": ["sessionManualTerm", "sessionManualAdContent", "totalRevenue"],
+        "fields": ["date", "sessionManualAdContent", "totalRevenue"],
         "max_rows": 100000,
     }).encode()
     d = http("https://api.supermetrics.com/enterprise/v2/query/data/json",
@@ -121,16 +121,18 @@ def fetch_rev_seg():
               "Content-Type": "application/json"}, body)
     if "error" in d:
         sys.exit("Supermetrics (rev_seg): " + json.dumps(d["error"]))
+    if (d.get("meta", {}).get("paginate") or {}).get("next"):
+        sys.exit("Supermetrics (rev_seg): resultado paginado, aumente max_rows")
     tot = defaultdict(float)
-    for _term, content, rev in d["data"][1:]:
+    for dia, content, rev in d["data"][1:]:
         label = REV_SEG_LABELS.get(str(content).strip().lower().replace(" ", "-"))
         if label:
-            tot[label] += rev
+            tot[(str(dia)[:10], label)] += rev
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
-    w.writerow(["segment", "revenue"])
-    for k, v in sorted(tot.items(), key=lambda kv: -kv[1]):
-        w.writerow([k, round(v, 2)])
+    w.writerow(["date", "segment", "revenue"])
+    for (dia, seg), v in sorted(tot.items()):
+        w.writerow([dia, seg, round(v, 2)])
     return out.getvalue()
 
 
@@ -238,7 +240,9 @@ def main():
     print(f"ac: {new_raw['ac'].count(chr(10)) - 1} linhas (antes {raw['ac'].count(chr(10)) - 1}); "
           f"ultima data {new_raw['ac'].strip().splitlines()[-1].split(',')[0]}")
 
-    print("rev_seg:\n" + new_raw["rev_seg"])
+    rs = list(csv.DictReader(io.StringIO(new_raw["rev_seg"])))
+    print(f"rev_seg: {len(rs)} linhas, {rs[0]['date']} a {rs[-1]['date']}, "
+          f"total R$ {sum(float(r['revenue']) for r in rs):,.2f}")
     if DRY:
         print("dry-run: nada gravado")
         return
