@@ -38,14 +38,24 @@ REV_SEG_LABELS = {  # conteudo do anuncio (utm_content) -> rotulo exibido
     "sem-engajamento": "Sem engajamento",
 }
 
-NAME_RE = re.compile(r"^\s*(\d\d)-(\d\d)-(\d{4})\s*\|\s*(\d+)h\s+(.+?)\s*$")
+NAME_RE = re.compile(r"^\s*(\d\d)-(\d\d)-(\d{4})\s*\|\s*(\d+)(?::\d+)?h\s+(.+?)\s*$")  # "9h" ou "9:15h" -> slot 9h
 SEGMENTS = {  # slug no nome da campanha -> rotulo usado no painel
     "seguro": "Seguro",
     "levemente-engajado": "Levemente engajado",
     "moderadamente-engajado": "Moderadamente engajado",
     "altamente-engajado": "Altamente engajado",
     "desengajado": "Desengajado",
+    "sem-engajamento": "Sem engajamento",
+    "risco-moderado": "Risco moderado",
+    "alto-risco": "Alto risco",
+    "moderamente-engajado": "Moderadamente engajado",  # erro de digitacao no nome de uma campanha
 }
+
+
+def seg_label(raw_seg):
+    """Normaliza o trecho de segmento do nome da campanha ("seguro (Copiar)", "sem engajamento"...)."""
+    slug = re.sub(r"\(.*?\)", "", raw_seg).strip().lower().replace(" ", "-")
+    return SEGMENTS.get(slug)
 
 
 def load_env():
@@ -171,7 +181,7 @@ def build_ac(campanhas):
         if not m:
             continue
         dd, mm, yy, hh, seg = m.groups()
-        label = SEGMENTS.get(seg.strip().lower().replace(" ", "-"))
+        label = seg_label(seg)
         if not label:
             continue
         a = agg[(f"{yy}-{mm}-{dd}", f"{hh}h", label)]
